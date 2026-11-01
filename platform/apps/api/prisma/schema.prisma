@@ -1,0 +1,196 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+enum ConversationType {
+  DIRECT
+  GROUP
+}
+
+enum MemberRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+enum ReceiptStatus {
+  DELIVERED
+  READ
+}
+
+model User {
+  id           String    @id @default(auto()) @map("_id") @db.ObjectId
+  username     String    @unique
+  email        String?   @unique
+  phone        String?   @unique
+  passwordHash String    @map("password_hash")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  profile      UserProfile?
+  devices      Device[]
+  sessions     Session[]
+  loginChallenges LoginChallenge[]
+  memberships  ConversationMember[]
+  contactsOwned Contact[] @relation("contactsOwned")
+  contactEntries Contact[] @relation("contactOf")
+  blocksMade   UserBlock[] @relation("blocksMade")
+  blocksReceived UserBlock[] @relation("blocksReceived")
+
+  @@map("users")
+}
+
+model UserProfile {
+  userId      String @id @map("_id") @db.ObjectId
+  displayName String @map("display_name")
+  user        User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_profiles")
+}
+
+model Device {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @map("user_id") @db.ObjectId
+  name      String
+  platform  String
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessions  Session[]
+  messages  Message[]
+  receipts  MessageReceipt[]
+
+  @@index([userId])
+  @@map("devices")
+}
+
+model Session {
+  id                 String    @id @default(auto()) @map("_id") @db.ObjectId
+  userId             String    @map("user_id") @db.ObjectId
+  deviceId           String    @map("device_id") @db.ObjectId
+  refreshTokenHash   String    @unique @map("refresh_token_hash")
+  previousTokenHash  String?   @unique @map("previous_token_hash")
+  expiresAt          DateTime  @map("expires_at")
+  revokedAt          DateTime? @map("revoked_at")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  device             Device    @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model LoginChallenge {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId     String   @map("user_id") @db.ObjectId
+  codeHash   String   @map("code_hash")
+  attempts   Int      @default(0)
+  expiresAt  DateTime @map("expires_at")
+  lastSentAt DateTime @map("last_sent_at")
+  deviceId   String?  @map("device_id") @db.ObjectId
+  deviceName String   @map("device_name")
+  platform   String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("login_challenges")
+}
+
+model Conversation {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  type         ConversationType
+  title        String?
+  directKey    String?  @unique @map("direct_key")
+  lastSequence Int      @default(0) @map("last_sequence")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  members      ConversationMember[]
+  messages     Message[]
+
+  @@map("conversations")
+}
+
+model ConversationMember {
+  id             String     @id @default(auto()) @map("_id") @db.ObjectId
+  conversationId String     @map("conversation_id") @db.ObjectId
+  userId         String     @map("user_id") @db.ObjectId
+  role           MemberRole @default(MEMBER)
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user           User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, userId])
+  @@index([userId, conversationId])
+  @@map("conversation_members")
+}
+
+model Message {
+  id               String   @id @default(auto()) @map("_id") @db.ObjectId
+  conversationId   String   @map("conversation_id") @db.ObjectId
+  senderDeviceId   String   @map("sender_device_id") @db.ObjectId
+  clientMessageId  String   @map("client_message_id")
+  ciphertext       String
+  encryptionHeader Json     @map("encryption_header")
+  sequenceNumber   Int      @map("sequence_number")
+  replyToMessageId String?  @map("reply_to_message_id") @db.ObjectId
+  createdAt        DateTime @default(now()) @map("created_at")
+  conversation     Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderDevice     Device   @relation(fields: [senderDeviceId], references: [id], onDelete: Restrict)
+  receipts         MessageReceipt[]
+
+  @@unique([senderDeviceId, clientMessageId])
+  @@unique([conversationId, sequenceNumber])
+  @@index([conversationId, createdAt])
+  @@map("messages")
+}
+
+model MessageReceipt {
+  id        String        @id @default(auto()) @map("_id") @db.ObjectId
+  messageId String        @map("message_id") @db.ObjectId
+  deviceId  String        @map("device_id") @db.ObjectId
+  status    ReceiptStatus
+  updatedAt DateTime      @updatedAt @map("updated_at")
+  message   Message       @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  device    Device        @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, deviceId])
+  @@index([deviceId, status])
+  @@map("message_receipts")
+}
+
+model OutboxEvent {
+  id          String    @id @default(auto()) @map("_id") @db.ObjectId
+  type        String
+  payload     Json
+  createdAt   DateTime  @default(now()) @map("created_at")
+  publishedAt DateTime? @map("published_at")
+
+  @@index([publishedAt, createdAt])
+  @@map("outbox_events")
+}
+
+model Contact {
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  ownerId       String   @map("owner_id") @db.ObjectId
+  contactUserId String   @map("contact_user_id") @db.ObjectId
+  createdAt     DateTime @default(now()) @map("created_at")
+  owner         User     @relation("contactsOwned", fields: [ownerId], references: [id], onDelete: Cascade)
+  contactUser   User     @relation("contactOf", fields: [contactUserId], references: [id], onDelete: Cascade)
+
+  @@unique([ownerId, contactUserId])
+  @@index([ownerId])
+  @@map("contacts")
+}
+
+model UserBlock {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  blockerId String   @map("blocker_id") @db.ObjectId
+  blockedId String   @map("blocked_id") @db.ObjectId
+  createdAt DateTime @default(now()) @map("created_at")
+  blocker   User     @relation("blocksMade", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked   User     @relation("blocksReceived", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@unique([blockerId, blockedId])
+  @@map("user_blocks")
+}

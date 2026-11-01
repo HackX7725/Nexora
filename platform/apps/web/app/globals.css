@@ -1,0 +1,50 @@
+@import "tailwindcss";
+@import "@platform/design-tokens/tokens.css";
+
+@source "./**/*.{ts,tsx}";
+@source "../src/**/*.{ts,tsx}";
+@source "../../../packages/ui/src/**/*.{ts,tsx}";
+
+@theme inline {
+  --color-primary: var(--nx-primary);
+  --color-primary-dark: var(--nx-primary-dark);
+  --color-canvas: var(--nx-bg);
+  --color-sidebar: var(--nx-sidebar);
+  --color-surface: var(--nx-surface);
+  --color-ink: var(--nx-ink);
+  --color-muted: var(--nx-muted);
+  --color-line: var(--nx-line);
+  --color-success: var(--nx-success);
+  --color-danger: var(--nx-danger);
+  --color-rail: var(--nx-rail);
+  --font-sans: var(--font-inter), Inter, sans-serif;
+}
+
+@layer base {
+  html,
+  body {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background: var(--nx-bg);
+    color: var(--nx-ink);
+    font-family: var(--font-sans);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--nx-primary);
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
